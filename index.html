@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>다오이의 숍🛒</title>
+    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
+    <style>
+        :root { --primary: #5865F2; --bg: #f8f9fd; --danger: #ff4b5c; }
+        body { font-family: 'Pretendard', sans-serif; background: var(--bg); margin: 0; padding: 40px; display: flex; flex-direction: column; align-items: center; }
+        
+        .admin-panel { background: #333; color: white; padding: 25px; border-radius: 30px; margin-bottom: 40px; width: 100%; max-width: 400px; text-align: center; display: none; box-shadow: 0 10px 30px rgba(0,0,0,0.2); }
+        .admin-panel input { width: 100%; padding: 12px; margin-bottom: 10px; border-radius: 12px; border: none; box-sizing: border-box; }
+        
+        #product-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 25px; width: 100%; max-width: 1200px; }
+        
+        .card { background: white; padding: 30px; border-radius: 40px; box-shadow: 0 15px 35px rgba(0,0,0,0.05); text-align: center; position: relative; transition: 0.3s; }
+        .card:hover { transform: translateY(-10px); }
+        
+        .delete-btn { position: absolute; top: 20px; right: 25px; background: none; border: none; color: #eee; cursor: pointer; font-size: 24px; transition: 0.2s; }
+        .card:hover .delete-btn { color: var(--danger); }
+
+        .image-box { width: 100%; height: 160px; background: #f1f3f5; border-radius: 30px; display: flex; align-items: center; justify-content: center; font-size: 50px; margin-bottom: 15px; }
+        .title { font-size: 24px; font-weight: 800; color: #333; margin-bottom: 5px; }
+        .price { font-size: 18px; color: #888; margin-bottom: 25px; }
+
+        .buyer-input { width: 100%; padding: 15px; border-radius: 15px; border: 2px solid #eee; margin-bottom: 12px; box-sizing: border-box; outline: none; }
+        .btn-buy { background: var(--primary); color: white; border: none; width: 100%; padding: 18px; border-radius: 22px; font-weight: bold; cursor: pointer; font-size: 18px; }
+        
+        .admin-trigger { position: fixed; bottom: 30px; right: 30px; background: #333; color: white; border: none; width: 60px; height: 60px; border-radius: 50%; cursor: pointer; font-size: 24px; }
+    </style>
+</head>
+<body>
+
+    <button class="admin-trigger" onclick="checkAdmin()">⚙️</button>
+
+    <div class="admin-panel" id="admin-panel">
+        <h3 style="margin-top:0">🛠️ 상품 추가</h3>
+        <input type="text" id="new-title" placeholder="상품 이름">
+        <input type="text" id="new-price" placeholder="가격">
+        <button onclick="uploadToFirebase()" style="width:100%; padding:15px; border-radius:15px; border:none; background:var(--primary); color:white; font-weight:bold; cursor:pointer;">저장하기</button>
+    </div>
+
+    <div id="product-grid"></div>
+
+<script>
+    const firebaseConfig = {
+        apiKey: "AIzaSyAP0VBpecA379R6ZXbG0LS9ormq_MniKq4",
+        authDomain: "dshop-f471f.firebaseapp.com",
+        databaseURL: "https://dshop-f471f-default-rtdb.firebaseio.com",
+        projectId: "dshop-f471f",
+        storageBucket: "dshop-f471f.firebasestorage.app",
+        messagingSenderId: "115747815211",
+        appId: "1:115747815211:web:270d0371e919eca5f2cf6e"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const database = firebase.database();
+    
+    // ⚠️ 웹훅 주소를 꼭 넣어주세요!
+    const DISCORD_WEBHOOK = "https://discord.com/api/webhooks/1494592552282886198/fTv0BPP56UizsSaR_PYkxwd1L9QWU3BWUVJPHSgbFUk1FaHhnIzJKX_7futJLQHb2amW"; 
+    const ADMIN_PW = "daon0102"; // 공통 비밀번호
+
+    database.ref('products').on('value', (snapshot) => {
+        const grid = document.getElementById('product-grid');
+        grid.innerHTML = "";
+        const data = snapshot.val();
+        for (let id in data) {
+            const product = data[id];
+            const card = document.createElement('div');
+            card.className = 'card';
+            card.innerHTML = `
+                <button class="delete-btn" onclick="removeProduct('${id}')">×</button>
+                <div class="image-box">🎁</div>
+                <div class="title">${product.title}</div>
+                <div class="price">${product.price}</div>
+                <input type="text" placeholder="구매자 성함" class="buyer-input">
+                <button class="btn-buy" onclick="buyOrder('${product.title}', '${product.price}', this)">구매하기</button>
+            `;
+            grid.appendChild(card);
+        }
+    });
+
+    function checkAdmin() {
+        if (prompt("관리자 비밀번호를 입력하세요.") === ADMIN_PW) {
+            const panel = document.getElementById('admin-panel');
+            panel.style.display = panel.style.display === 'block' ? 'none' : 'block';
+        } else { alert("비밀번호가 틀렸습니다."); }
+    }
+
+    function uploadToFirebase() {
+        const title = document.getElementById('new-title').value;
+        const price = document.getElementById('new-price').value;
+        if (!title || !price) return alert("빈칸을 채워주세요!");
+        database.ref('products').push({ title, price });
+        document.getElementById('new-title').value = "";
+        document.getElementById('new-price').value = "";
+    }
+
+    // 🔥 삭제 시에도 비밀번호 확인 기능 추가
+    function removeProduct(id) {
+        const pw = prompt("삭제하시겠습니까? 관리자 비밀번호를 입력하세요.");
+        if (pw === ADMIN_PW) {
+            database.ref('products/' + id).remove();
+            alert("삭제되었습니다.");
+        } else if (pw !== null) {
+            alert("비밀번호가 일치하지 않아 삭제할 수 없습니다.");
+        }
+    }
+
+    function buyOrder(title, price, btn) {
+        const name = btn.parentElement.querySelector('.buyer-input').value;
+        if (!name) return alert("성함을 적어주세요!");
+        fetch(DISCORD_WEBHOOK, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                embeds: [{
+                    title: "🛒 새로운 주문!",
+                    description: `**구매자:** ${name}\n**상품명:** ${title}\n**가 격:** ${price}`,
+                    color: 5814783,
+                    timestamp: new Date()
+                }]
+            })
+        }).then(() => alert(`${name}님, 주문 완료!`));
+    }
+</script>
+</body>
+</html>
