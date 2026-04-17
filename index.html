@@ -3,19 +3,28 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>다오이의 중고 장터!!!🛒</title>
+    <title>모두의 중고 장터!!!🛒</title>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
     <style>
         :root { --primary: #5865F2; --bg: #f8f9fd; --danger: #ff4b5c; }
         body { font-family: 'Pretendard', sans-serif; background: var(--bg); margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; }
+        
         .upload-panel { background: white; padding: 25px; border-radius: 30px; margin-bottom: 40px; width: 100%; max-width: 450px; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.1); }
         .upload-panel input { width: 100%; padding: 12px; margin-bottom: 10px; border-radius: 12px; border: 2px solid #eee; box-sizing: border-box; }
+        
         #product-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 25px; width: 100%; max-width: 1200px; }
-        .card { background: white; padding: 20px; border-radius: 30px; box-shadow: 0 15px 35px rgba(0,0,0,0.05); text-align: center; position: relative; }
-        .image-box { width: 100%; height: 200px; background: #f1f3f5; border-radius: 20px; margin-bottom: 15px; object-fit: cover; }
-        .delete-btn { position: absolute; top: 15px; right: 15px; background: white; border: none; cursor: pointer; border-radius: 50%; width: 30px; height: 30px; font-weight: bold; }
+        .card { background: white; padding: 20px; border-radius: 30px; box-shadow: 0 15px 35px rgba(0,0,0,0.05); text-align: center; position: relative; transition: 0.3s; }
+        .image-box { width: 100%; height: 200px; background: #eee; border-radius: 20px; margin-bottom: 15px; object-fit: cover; }
+        .delete-btn { position: absolute; top: 15px; right: 15px; background: white; border: none; cursor: pointer; border-radius: 50%; width: 30px; height: 30px; font-weight: bold; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
         .btn-buy { background: var(--primary); color: white; border: none; width: 100%; padding: 15px; border-radius: 15px; font-weight: bold; cursor: pointer; }
+
+        /* 주문 팝업창 */
+        #order-modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); z-index: 1000; align-items: center; justify-content: center; }
+        .modal-content { background: white; padding: 30px; border-radius: 30px; width: 90%; max-width: 350px; text-align: center; }
+        .modal-content input { width: 100%; padding: 15px; margin-bottom: 15px; border-radius: 12px; border: 2px solid #eee; box-sizing: border-box; }
+        .modal-btns { display: flex; gap: 10px; }
+        .modal-btns button { flex: 1; padding: 15px; border-radius: 12px; border: none; font-weight: bold; cursor: pointer; }
     </style>
 </head>
 <body>
@@ -24,14 +33,25 @@
         <h3>📢 상품 등록하기</h3>
         <input type="text" id="new-title" placeholder="상품 이름">
         <input type="text" id="new-price" placeholder="가격">
-        <input type="file" id="new-file" accept="image/*" style="border:none;">
-        <button onclick="uploadToFirebase()" style="width:100%; padding:15px; border-radius:15px; border:none; background:var(--primary); color:white; font-weight:bold; cursor:pointer;">장터에 올리기</button>
+        <input type="file" id="new-file" accept="image/*">
+        <button onclick="uploadToFirebase()" style="width:100%; padding:15px; border-radius:15px; border:none; background:var(--primary); color:white; font-weight:bold; cursor:pointer; margin-top:10px;">장터에 올리기</button>
     </div>
 
     <div id="product-grid"></div>
 
+    <div id="order-modal">
+        <div class="modal-content">
+            <h2 id="modal-item-title" style="margin-top:0;">주문하기</h2>
+            <input type="text" id="buyer-name" placeholder="구매자 이름">
+            <input type="tel" id="buyer-phone" placeholder="전화번호">
+            <div class="modal-btns">
+                <button style="background:#eee;" onclick="closeModal()">취소</button>
+                <button style="background:var(--primary); color:white;" onclick="submitOrder()">주문완료</button>
+            </div>
+        </div>
+    </div>
+
 <script>
-    // 다온님 Firebase 설정 (기존 키 그대로 쓰세요)
     const firebaseConfig = {
         apiKey: "AIzaSyAP0VBpecA379R6ZXbG0LS9ormq_MniKq4",
         authDomain: "dshop-f471f.firebaseapp.com",
@@ -44,12 +64,15 @@
 
     firebase.initializeApp(firebaseConfig);
     const database = firebase.database();
-    
-    // 데이터 불러오기
+    const DISCORD_WEBHOOK = "https://discord.com/api/webhooks/1494592552282886198/fTv0BPP56UizsSaR_PYkxwd1L9QWU3BWUVJPHSgbFUk1FaHhnIzJKX_7futJLQHb2amW"; 
+
+    let currentItem = {};
+
     database.ref('products').on('value', (snapshot) => {
         const grid = document.getElementById('product-grid');
         grid.innerHTML = "";
         const data = snapshot.val();
+        if(!data) return;
         for (let id in data) {
             const product = data[id];
             const card = document.createElement('div');
@@ -57,45 +80,78 @@
             card.innerHTML = `
                 <button class="delete-btn" onclick="removeProduct('${id}')">×</button>
                 <img src="${product.img}" class="image-box">
-                <div style="font-weight:bold; font-size:18px;">${product.title}</div>
-                <div style="color:var(--primary); margin-bottom:10px;">${product.price}</div>
-                <button class="btn-buy">구매하기</button>
+                <div style="font-weight:bold;">${product.title}</div>
+                <div style="color:var(--primary); font-weight:bold; margin-bottom:10px;">${product.price}</div>
+                <button class="btn-buy" onclick="openModal('${product.title}', '${product.price}')">구매하기</button>
             `;
             grid.appendChild(card);
         }
     });
 
-    // 🚀 파일 선택해서 올리기 기능
     function uploadToFirebase() {
         const title = document.getElementById('new-title').value;
         const price = document.getElementById('new-price').value;
-        const fileInput = document.getElementById('new-file');
-        const file = fileInput.files[0];
+        const file = document.getElementById('new-file').files[0];
 
-        if (!title || !price || !file) return alert("이름, 가격, 사진을 모두 넣어주세요!");
+        if (!title || !price || !file) return alert("전부 입력해주세요!");
 
-        // 파일을 읽어서 글자로 변환하기
         const reader = new FileReader();
         reader.onload = function(e) {
-            const imageData = e.target.result; // 이게 변환된 이미지 데이터예요!
-            
-            // 파이어베이스에 저장
-            database.ref('products').push({
-                title: title,
-                price: price,
-                img: imageData
-            }).then(() => {
-                alert("장터에 올라갔습니다!");
-                document.getElementById('new-title').value = "";
-                document.getElementById('new-price').value = "";
-                fileInput.value = "";
-            });
+            // 용량이 너무 크면 파이어베이스가 멈춰서, 사진 크기를 줄이는 작업
+            const img = new Image();
+            img.src = e.target.result;
+            img.onload = function() {
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                canvas.width = 400; // 가로 400px로 압축
+                canvas.height = (img.height * 400) / img.width;
+                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                const compressedData = canvas.toDataURL('image/jpeg', 0.7); // 화질 70%로 압축
+
+                database.ref('products').push({
+                    title: title, price: price, img: compressedData
+                }).then(() => {
+                    alert("장터 등록 성공!");
+                    location.reload();
+                });
+            };
         };
         reader.readAsDataURL(file);
     }
 
+    function openModal(title, price) {
+        currentItem = { title, price };
+        document.getElementById('modal-item-title').innerText = title + " 주문";
+        document.getElementById('order-modal').style.display = 'flex';
+    }
+
+    function closeModal() {
+        document.getElementById('order-modal').style.display = 'none';
+    }
+
+    function submitOrder() {
+        const name = document.getElementById('buyer-name').value;
+        const phone = document.getElementById('buyer-phone').value;
+        if (!name || !phone) return alert("정보를 입력하세요!");
+
+        fetch(DISCORD_WEBHOOK, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                embeds: [{
+                    title: "🛒 장터 주문 도착!",
+                    description: `**구매자:** ${name}\n**전화번호:** ${phone}\n**상품명:** ${currentItem.title}\n**가격:** ${currentItem.price}`,
+                    color: 5814783 // 디스코드용 파란색 숫자 코드
+                }]
+            })
+        }).then(() => {
+            alert("주문 완료!");
+            closeModal();
+        });
+    }
+
     function removeProduct(id) {
-        if (prompt("'삭제할게요'를 입력하세요.") === "삭제할게요") {
+        if (prompt("'삭제할게요' 입력 시 삭제됩니다.") === "삭제할게요") {
             database.ref('products/' + id).remove();
         }
     }
