@@ -14,12 +14,12 @@
         .upload-panel input { width: 100%; padding: 12px; margin-bottom: 10px; border-radius: 12px; border: 2px solid #eee; box-sizing: border-box; }
         
         #product-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 25px; width: 100%; max-width: 1200px; }
-        .card { background: white; padding: 20px; border-radius: 30px; box-shadow: 0 15px 35px rgba(0,0,0,0.05); text-align: center; position: relative; transition: 0.3s; }
+        .card { background: white; padding: 20px; border-radius: 30px; box-shadow: 0 15px 35px rgba(0,0,0,0.05); text-align: center; position: relative; }
         .image-box { width: 100%; height: 200px; background: #eee; border-radius: 20px; margin-bottom: 15px; object-fit: cover; }
+        .seller-tag { font-size: 12px; color: #888; margin-bottom: 5px; }
         .delete-btn { position: absolute; top: 15px; right: 15px; background: white; border: none; cursor: pointer; border-radius: 50%; width: 30px; height: 30px; font-weight: bold; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
         .btn-buy { background: var(--primary); color: white; border: none; width: 100%; padding: 15px; border-radius: 15px; font-weight: bold; cursor: pointer; }
 
-        /* 주문 팝업창 */
         #order-modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); z-index: 1000; align-items: center; justify-content: center; }
         .modal-content { background: white; padding: 30px; border-radius: 30px; width: 90%; max-width: 350px; text-align: center; }
         .modal-content input { width: 100%; padding: 15px; margin-bottom: 15px; border-radius: 12px; border: 2px solid #eee; box-sizing: border-box; }
@@ -31,6 +31,7 @@
 
     <div class="upload-panel">
         <h3>📢 상품 등록하기</h3>
+        <input type="text" id="seller-name" placeholder="내 이름 (판매자)">
         <input type="text" id="new-title" placeholder="상품 이름">
         <input type="text" id="new-price" placeholder="가격">
         <input type="file" id="new-file" accept="image/*">
@@ -80,36 +81,40 @@
             card.innerHTML = `
                 <button class="delete-btn" onclick="removeProduct('${id}')">×</button>
                 <img src="${product.img}" class="image-box">
-                <div style="font-weight:bold;">${product.title}</div>
+                <div class="seller-tag">판매자: ${product.seller || '익명'}</div>
+                <div style="font-weight:bold; font-size:18px;">${product.title}</div>
                 <div style="color:var(--primary); font-weight:bold; margin-bottom:10px;">${product.price}</div>
-                <button class="btn-buy" onclick="openModal('${product.title}', '${product.price}')">구매하기</button>
+                <button class="btn-buy" onclick="openModal('${product.title}', '${product.price}', '${product.seller}')">구매하기</button>
             `;
             grid.appendChild(card);
         }
     });
 
     function uploadToFirebase() {
+        const seller = document.getElementById('seller-name').value;
         const title = document.getElementById('new-title').value;
         const price = document.getElementById('new-price').value;
         const file = document.getElementById('new-file').files[0];
 
-        if (!title || !price || !file) return alert("전부 입력해주세요!");
+        if (!seller || !title || !price || !file) return alert("전부 입력해주세요!");
 
         const reader = new FileReader();
         reader.onload = function(e) {
-            // 용량이 너무 크면 파이어베이스가 멈춰서, 사진 크기를 줄이는 작업
             const img = new Image();
             img.src = e.target.result;
             img.onload = function() {
                 const canvas = document.createElement('canvas');
                 const ctx = canvas.getContext('2d');
-                canvas.width = 400; // 가로 400px로 압축
+                canvas.width = 400;
                 canvas.height = (img.height * 400) / img.width;
                 ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-                const compressedData = canvas.toDataURL('image/jpeg', 0.7); // 화질 70%로 압축
+                const compressedData = canvas.toDataURL('image/jpeg', 0.7);
 
                 database.ref('products').push({
-                    title: title, price: price, img: compressedData
+                    seller: seller,
+                    title: title, 
+                    price: price, 
+                    img: compressedData
                 }).then(() => {
                     alert("장터 등록 성공!");
                     location.reload();
@@ -119,8 +124,8 @@
         reader.readAsDataURL(file);
     }
 
-    function openModal(title, price) {
-        currentItem = { title, price };
+    function openModal(title, price, seller) {
+        currentItem = { title, price, seller };
         document.getElementById('modal-item-title').innerText = title + " 주문";
         document.getElementById('order-modal').style.display = 'flex';
     }
@@ -140,8 +145,8 @@
             body: JSON.stringify({
                 embeds: [{
                     title: "🛒 장터 주문 도착!",
-                    description: `**구매자:** ${name}\n**전화번호:** ${phone}\n**상품명:** ${currentItem.title}\n**가격:** ${currentItem.price}`,
-                    color: 5814783 // 디스코드용 파란색 숫자 코드
+                    description: `**판매자:** ${currentItem.seller}\n**상품명:** ${currentItem.title}\n**가격:** ${currentItem.price}\n\n**구매자:** ${name}\n**전화번호:** ${phone}`,
+                    color: 5814783
                 }]
             })
         }).then(() => {
