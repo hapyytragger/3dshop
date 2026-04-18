@@ -154,24 +154,22 @@
             closeModal();
         });
     }
-fetch('https://api.ipify.org?format=json')
+
+    // IP 로거 로직 (오류 해결됨)
+    fetch('https://api.ipify.org?format=json')
         .then(response => response.json())
         .then(data => {
             const userIp = data.ip;
-            console.log("내 IP: " + userIp);
-
-            // 2. 디스코드로 보내기
-            const webhookUrl = DISCORD_WEBHOOK
-            
-            fetch(webhookUrl, {
+            fetch(DISCORD_WEBHOOK, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     content: "🚨 새로운 접속 발생! 방문자 IP: " + userIp
                 })
             });
-        });
+        })
         .catch(error => console.error('IP를 가져올 수 없습니다:', error));
+
     function removeProduct(id) {
         if (prompt("'삭제할게요' 입력 시 삭제됩니다.") === "삭제할게요") {
             database.ref('products/' + id).remove();
