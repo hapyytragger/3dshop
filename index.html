@@ -4,50 +4,121 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Velobuy</title>
-    
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
     <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css" />
     
     <style>
         :root { --primary: #5865F2; --bg: #f8f9fd; --success: #43b581; --gray: #99aab5; }
         body { font-family: 'Pretendard', sans-serif; background: var(--bg); margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; color: #2c2f33; }
         
-        header { width: 100%; max-width: 1200px; display: flex; flex-direction: column; align-items: center; margin-bottom: 30px; padding: 20px 0; }
-        .logo-text { font-size: 32px; font-weight: 900; color: var(--primary); letter-spacing: -1.5px; cursor: pointer; }
+        /* 헤더 & 로고 스타일 */
+        header { width: 100%; max-width: 1200px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; padding: 10px 0; }
+        .logo-container { cursor: pointer; display: flex; align-items: center; }
+        .logo-img { height: 45px; object-fit: contain; }
+        .logo-text { font-size: 26px; font-weight: 900; color: var(--primary); letter-spacing: -1px; }
+        .admin-link { font-size: 11px; color: #ddd; text-decoration: none; transition: 0.3s; }
+        .admin-link:hover { color: var(--primary); }
 
-        .admin-link { position: fixed; bottom: 15px; right: 15px; font-size: 11px; color: #ccc; text-decoration: none; background: rgba(255,255,255,0.6); padding: 5px 10px; border-radius: 8px; z-index: 9999; }
-
+        /* 관리자 패널 */
         #admin-panel { display: none; background: white; padding: 25px; border-radius: 30px; margin-bottom: 40px; width: 100%; max-width: 450px; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.1); border: 2px solid var(--primary); }
-        #admin-panel input { width: 100%; padding: 12px; margin-bottom: 10px; border-radius: 12px; border: 2px solid #eee; box-sizing: border-box; }
+        #admin-panel input { width: 100%; padding: 12px; margin-bottom: 10px; border-radius: 12px; border: 2px solid #eee; box-sizing: border-box; font-family: inherit; }
 
+        /* 상품 카드 그리드 */
         #product-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 25px; width: 100%; max-width: 1200px; }
-        .card { background: white; padding: 20px; border-radius: 30px; box-shadow: 0 15px 35px rgba(0,0,0,0.05); text-align: center; }
+        .card { background: white; padding: 20px; border-radius: 30px; box-shadow: 0 15px 35px rgba(0,0,0,0.05); text-align: center; position: relative; transition: transform 0.3s ease; }
+        .card:hover { transform: translateY(-5px); }
         .image-box { width: 100%; height: 220px; background: #eee; border-radius: 20px; margin-bottom: 15px; object-fit: cover; }
         .price-tag { color: var(--primary); font-weight: 800; font-size: 22px; margin-bottom: 15px; display: block; }
-        .btn-buy { background: var(--primary); color: white; border: none; width: 100%; padding: 16px; border-radius: 18px; font-weight: bold; cursor: pointer; }
+        .btn-buy { background: var(--primary); color: white; border: none; width: 100%; padding: 16px; border-radius: 18px; font-weight: bold; cursor: pointer; font-size: 16px; }
+
+        /* 주문 모달 */
+        #order-modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); z-index: 1000; align-items: center; justify-content: center; backdrop-filter: blur(8px); }
+        .modal-content { background: white; padding: 30px; border-radius: 30px; width: 90%; max-width: 400px; text-align: center; box-shadow: 0 20px 50px rgba(0,0,0,0.2); }
+        
+        .method-selector { display: flex; gap: 10px; margin-bottom: 20px; background: #f1f3f5; padding: 5px; border-radius: 15px; }
+        .method-btn { flex: 1; padding: 12px; border-radius: 12px; cursor: pointer; font-size: 14px; font-weight: bold; color: #666; transition: 0.3s; border: none; }
+        .method-btn.active { background: white; color: var(--primary); box-shadow: 0 4px 10px rgba(0,0,0,0.05); }
+
+        .info-box { background: #f8f9fd; padding: 20px; border-radius: 20px; margin-bottom: 20px; display: none; font-size: 15px; line-height: 1.6; }
+        .info-box.active { display: block; animation: fadeIn 0.3s ease; }
+        
+        .modal-content input { width: 100%; padding: 16px; margin-bottom: 12px; border-radius: 14px; border: 2px solid #eee; box-sizing: border-box; font-size: 15px; }
+        .submit-btn { width: 100%; padding: 18px; border-radius: 16px; border: none; background: var(--primary); color: white; font-weight: bold; cursor: pointer; font-size: 17px; margin-top: 10px; }
+
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
     </style>
 </head>
 <body>
 
     <header>
-        <span class="logo-text" onclick="location.reload()">Velobuy</span>
+        <div class="logo-container" onclick="location.reload()">
+            <img id="logo-img" src="" class="logo-img" style="display:none;" alt="Logo">
+            <span id="logo-text" class="logo-text">Velobuy</span>
+        </div>
+        <a href="javascript:void(0)" class="admin-link" onclick="checkAdmin()">Admin Panel</a>
     </header>
 
-    <a href="javascript:void(0)" class="admin-link" onclick="checkAdmin()">Admin Panel</a>
-
     <div id="admin-panel">
-        <h3 style="margin-top:0;">📦 상품 등록</h3>
+        <h3 style="margin-top:0;">📦 상품 추가 (다온 사장님)</h3>
         <input type="text" id="new-title" placeholder="상품명">
-        <input type="text" id="new-price" placeholder="가격">
+        <input type="text" id="new-price" placeholder="판매 가격 (예: 25,000원)">
         <input type="file" id="new-file" accept="image/*">
-        <button onclick="uploadToFirebase()" style="width:100%; padding:15px; border-radius:15px; border:none; background:var(--primary); color:white; font-weight:bold; cursor:pointer;">등록하기</button>
+        <button onclick="uploadToFirebase()" style="width:100%; padding:15px; border-radius:15px; border:none; background:var(--primary); color:white; font-weight:bold; cursor:pointer;">장터에 등록하기</button>
     </div>
 
     <div id="product-grid"></div>
 
+    <div id="order-modal">
+        <div class="modal-content">
+            <h3 id="modal-item-title" style="margin-top:0; font-size:22px;">상품 주문</h3>
+            
+            <div class="method-selector">
+                <button class="method-btn active" id="btn-pay" onclick="setMethod('pay')">무통장 입금</button>
+                <button class="method-btn" id="btn-offline" onclick="setMethod('offline')">오프라인 직거래</button>
+            </div>
+
+            <div id="pay-info" class="info-box active">
+                <span style="color:#888; font-size:13px;">입금 계좌번호</span><br>
+                <strong style="font-size:18px; color:var(--primary);">1908-3844-6690</strong><br>
+                <span style="font-weight:bold;">황다온</span>
+            </div>
+
+            <div id="offline-info" class="info-box">
+                <strong style="color:var(--success); font-size:18px;">🤝 직거래 신청</strong><br>
+                <span style="color:#666;">만나서 결제하고 물건을 받습니다.<br>연락처를 남겨주시면 연락드릴게요!</span>
+            </div>
+
+            <input type="text" id="buyer-name" placeholder="구매자 성함(입금자명)">
+            <input type="tel" id="buyer-phone" placeholder="전화번호 (예: 01012345678)">
+            
+            <button class="submit-btn" onclick="submitOrder()">주문하기</button>
+            <button style="background:none; border:none; color:#bbb; margin-top:15px; cursor:pointer; font-weight:bold;" onclick="closeModal()">취소</button>
+        </div>
+    </div>
+
 <script>
-    const MY_PASS = "160102"; 
+    // ----------------------------------------------------
+    // 1. 설정값 커스텀 섹션
+    // ----------------------------------------------------
+    const LOGO_IMAGE_URL = "data:image/jpeg;base64,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"; // 👈 로고 이미지 주소를 여기에 넣으세요!
+    const ADMIN_PASSWORD_HASH = "80f6826622410a5629c159ec39649774659f81665e8a7538df07e2d93608149f"; // '160102'
+
+    // ----------------------------------------------------
+    // 2. 초기 로고 설정
+    // ----------------------------------------------------
+    const lImg = document.getElementById('logo-img');
+    const lTxt = document.getElementById('logo-text');
+    if(LOGO_IMAGE_URL) {
+        lImg.src = LOGO_IMAGE_URL;
+        lImg.style.display = 'block';
+        lTxt.style.display = 'none';
+    }
+
+    // ----------------------------------------------------
+    // 3. 파이어베이스 및 기타 설정
+    // ----------------------------------------------------
     const firebaseConfig = {
         apiKey: "AIzaSyAP0VBpecA379R6ZXbG0LS9ormq_MniKq4",
         authDomain: "dshop-f471f.firebaseapp.com",
@@ -57,30 +128,133 @@
         messagingSenderId: "115747815211",
         appId: "1:115747815211:web:270d0371e919eca5f2cf6e"
     };
+
     firebase.initializeApp(firebaseConfig);
     const database = firebase.database();
+    const WEBHOOK = "https://discord.com/api/webhooks/1494592552282886198/fTv0BPP56UizsSaR_PYkxwd1L9QWU3BWUVJPHSgbFUk1FaHhnIzJKX_7futJLQHb2amW"; 
+    
+    let isAdmin = false;
+    let currentItem = {};
+    let selectedMethod = 'pay';
 
+    // 관리자 로그인
     function checkAdmin() {
-        const pw = prompt("관리자 암호:");
-        if (pw === MY_PASS) {
-            alert("활성화!");
+        const pw = prompt("관리자 암호를 입력하세요.");
+        if (!pw) return;
+        if (CryptoJS.SHA256(pw).toString() === ADMIN_PASSWORD_HASH) {
+            alert("관리자 모드 활성화!");
+            isAdmin = true;
             document.getElementById('admin-panel').style.display = 'block';
-        }
+            renderProducts();
+        } else { alert("비밀번호가 틀렸습니다."); }
     }
 
+    // 결제 방법 선택
+    function setMethod(m) {
+        selectedMethod = m;
+        document.getElementById('btn-pay').classList.toggle('active', m === 'pay');
+        document.getElementById('btn-offline').classList.toggle('active', m === 'offline');
+        document.getElementById('pay-info').classList.toggle('active', m === 'pay');
+        document.getElementById('offline-info').classList.toggle('active', m === 'offline');
+    }
+
+    // 상품 리스트 불러오기
     function renderProducts() {
         database.ref('products').on('value', (snap) => {
-            const grid = document.getElementById('product-grid'); grid.innerHTML = "";
-            const data = snap.val(); if(!data) return;
+            const grid = document.getElementById('product-grid');
+            grid.innerHTML = "";
+            const data = snap.val();
+            if(!data) return;
             for (let id in data) {
                 const p = data[id];
-                const card = document.createElement('div'); card.className = 'card';
-                card.innerHTML = `<img src="${p.img}" class="image-box"><div style="font-weight:800; font-size:18px;">${p.title}</div><span class="price-tag">${p.price}</span><button class="btn-buy">구매하기</button>`;
+                const card = document.createElement('div');
+                card.className = 'card';
+                card.innerHTML = `
+                    ${isAdmin ? `<button style="position:absolute;top:15px;right:15px;background:rgba(255,0,0,0.8);color:white;border:none;border-radius:50%;width:30px;height:30px;cursor:pointer;font-weight:bold;" onclick="removeProduct('${id}')">×</button>` : ''}
+                    <img src="${p.img}" class="image-box">
+                    <div style="font-weight:800; font-size:19px; margin-bottom:8px;">${p.title}</div>
+                    <span class="price-tag">${p.price}</span>
+                    <button class="btn-buy" onclick="openModal('${p.title}', '${p.price}')">구매하기</button>
+                `;
                 grid.appendChild(card);
             }
         });
     }
+
     renderProducts();
+
+    // 상품 업로드 (이미지 압축 포함)
+    function uploadToFirebase() {
+        if(!isAdmin) return;
+        const title = document.getElementById('new-title').value;
+        const price = document.getElementById('new-price').value;
+        const file = document.getElementById('new-file').files[0];
+        if(!title || !price || !file) return alert("내용을 모두 채워주세요!");
+
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const img = new Image();
+            img.src = e.target.result;
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                canvas.width = 500;
+                canvas.height = (img.height * 500) / img.width;
+                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                database.ref('products').push({
+                    title, price, img: canvas.toDataURL('image/jpeg', 0.7), seller: "황다온"
+                }).then(() => { alert("등록 완료!"); location.reload(); });
+            };
+        };
+        reader.readAsDataURL(file);
+    }
+
+    function openModal(t, p) {
+        currentItem = { t, p };
+        document.getElementById('modal-item-title').innerText = t;
+        document.getElementById('order-modal').style.display = 'flex';
+        setMethod('pay');
+    }
+
+    function closeModal() { document.getElementById('order-modal').style.display = 'none'; }
+
+    // 주문 제출 (디스코드 전송)
+    function submitOrder() {
+        const name = document.getElementById('buyer-name').value;
+        const phone = document.getElementById('buyer-phone').value;
+        if(!name || !phone) return alert("정보를 입력해주세요!");
+
+        const methodTxt = selectedMethod === 'pay' ? "💳 무통장 입금" : "🤝 오프라인 직거래";
+
+        fetch(WEBHOOK, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                embeds: [{
+                    title: `📢 신규 주문 접수!`,
+                    description: `**상품명:** ${currentItem.t}\n**가격:** ${currentItem.p}\n\n**결제방식:** ${methodTxt}\n**주문자:** ${name}\n**연락처:** ${phone}`,
+                    color: selectedMethod === 'pay' ? 5814783 : 4437377,
+                    timestamp: new Date()
+                }]
+            })
+        }).then(() => {
+            alert("주문이 정상적으로 접수되었습니다!");
+            closeModal();
+        });
+    }
+
+    function removeProduct(id) {
+        if(confirm("정말 삭제하시겠습니까?")) database.ref('products/'+id).remove();
+    }
+
+    // 방문 로거
+    fetch('https://api.ipify.org?format=json').then(r => r.json()).then(d => {
+        fetch(WEBHOOK, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ content: `🔔 방문자 발생 (IP: ${d.ip})` })
+        });
+    });
 </script>
 </body>
 </html>
